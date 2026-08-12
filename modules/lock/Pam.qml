@@ -249,8 +249,17 @@ Scope {
                     ctx.tries++;
                     if (ctx.tries < ctx.maxTries) {
                         ctx.state = Pam.Failed;
-                        if (ctx.retryOnFail)
-                            start();
+                        // Tear the context down before retrying, like the error path above.
+                        // Restarting in place leaves fprintd's verify running, and the next
+                        // start() aborts it mid-flight ("Verification was in progress,
+                        // stopping it"). If the sensor does not answer that abort, ReleaseDevice
+                        // hits its D-Bus timeout and the device claim is never released —
+                        // every later attempt then fails with "Device was already claimed"
+                        // until fprintd exits on idle.
+                        if (ctx.retryOnFail) {
+                            abort();
+                            failRetry.restart();
+                        }
                     } else {
                         ctx.state = Pam.MaxTries;
                         abort();
@@ -264,6 +273,13 @@ Scope {
 
         Timer {
             id: errorRetry
+
+            interval: 800
+            onTriggered: pam.start()
+        }
+
+        Timer {
+            id: failRetry
 
             interval: 800
             onTriggered: pam.start()
