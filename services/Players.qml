@@ -117,6 +117,15 @@ Singleton {
             settle.restart();
         }
 
+        // Art usually resolves after title/artist (Chromium fetches/writes a temp
+        // file asynchronously), so a settle restarted only by text metadata fires
+        // before art is available. Restarting on this too lets the single toast wait
+        // for both when art arrives inside the settle window, without re-toasting
+        // for art alone once title/artist have already settled (see key dedup above).
+        function onTrackArtUrlChanged(): void {
+            settle.restart();
+        }
+
         target: root.active
     }
 
