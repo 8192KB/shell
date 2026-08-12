@@ -37,7 +37,12 @@ Singleton {
 
     Timer {
         id: settle
-        interval: 150
+
+        // Long enough to cover the gap between the text metadata and the art that
+        // follows it, since Toast.icon is fixed once the toast exists and cannot be
+        // corrected later. Chromium republishes art a few hundred ms behind the
+        // title, so a shorter window locks the toast to a missing icon.
+        interval: 300
         onTriggered: {
             root.syncStable();
             root.maybeToastNowPlaying();
@@ -117,11 +122,9 @@ Singleton {
             settle.restart();
         }
 
-        // Art usually resolves after title/artist (Chromium fetches/writes a temp
-        // file asynchronously), so a settle restarted only by text metadata fires
-        // before art is available. Restarting on this too lets the single toast wait
-        // for both when art arrives inside the settle window, without re-toasting
-        // for art alone once title/artist have already settled (see key dedup above).
+        // Art lands after the text on Chromium-based players, which write a fresh
+        // temp file per track. Waiting on it too means the icon is read once the art
+        // has stopped moving; the key dedup above keeps this from toasting twice.
         function onTrackArtUrlChanged(): void {
             settle.restart();
         }
