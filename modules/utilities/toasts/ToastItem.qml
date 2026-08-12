@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Caelestia
 import Caelestia.Config
 import qs.components
@@ -56,8 +57,17 @@ StyledRect {
         spacing: Tokens.spacing.medium
 
         StyledRect {
+            id: iconContainer
+
+            readonly property bool isImageUrl: {
+                const ic = root.modelData.icon;
+                return ic.startsWith("http://") || ic.startsWith("https://") || ic.startsWith("file://");
+            }
+
             radius: Tokens.rounding.large
             color: {
+                if (isImageUrl)
+                    return "transparent";
                 if (root.modelData.type === Toast.Success)
                     return Colours.palette.m3success;
                 if (root.modelData.type === Toast.Warning)
@@ -67,14 +77,50 @@ StyledRect {
                 return Colours.palette.m3surfaceContainerHigh;
             }
 
-            implicitWidth: implicitHeight
-            implicitHeight: icon.implicitHeight + Tokens.padding.large
+            implicitWidth: isImageUrl ? artSize : implicitHeight
+            implicitHeight: isImageUrl ? artSize : icon.implicitHeight + Tokens.padding.large
 
+            readonly property real artSize: icon.implicitHeight + Tokens.padding.large
+
+            // Album art thumbnail (shown when icon is a URL)
+            Image {
+                id: artImage
+
+                anchors.fill: parent
+                source: iconContainer.isImageUrl ? root.modelData.icon : ""
+                fillMode: Image.PreserveAspectCrop
+                visible: iconContainer.isImageUrl && status === Image.Ready
+                smooth: true
+
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: ShaderEffectSource {
+                        sourceItem: Rectangle {
+                            width: artImage.width
+                            height: artImage.height
+                            radius: Tokens.rounding.large
+                        }
+                    }
+                }
+            }
+
+            // Fallback icon when image fails to load
+            MaterialIcon {
+                anchors.centerIn: parent
+                text: "music_note"
+                visible: iconContainer.isImageUrl && artImage.status !== Image.Ready
+                color: Colours.palette.m3onSurfaceVariant
+                fontStyle: Tokens.font.icon.builders.large.scale(1.2).build()
+            }
+
+            // Standard material icon (shown for non-URL icons)
             MaterialIcon {
                 id: icon
 
                 anchors.centerIn: parent
                 text: root.modelData.icon
+                visible: !iconContainer.isImageUrl
                 color: {
                     if (root.modelData.type === Toast.Success)
                         return Colours.palette.m3onSuccess;
