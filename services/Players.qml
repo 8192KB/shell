@@ -15,6 +15,35 @@ Singleton {
     readonly property MprisPlayer active: props.manualActive ?? list.find(p => getIdentity(p) === GlobalConfig.services.defaultPlayer) ?? list[0] ?? null
     property alias manualActive: props.manualActive
 
+    // Debounced metadata: Chromium's MPRIS bridge (browser tabs, Electron wrappers like
+    // Pear) fires title/artist/album as separate PropertiesChanged signals while a page's
+    // MediaSession JS fills them in one at a time, so raw values show mismatched pairs
+    // (new title + stale artist) for a frame. Consumers should read these instead of
+    // Players.active.trackTitle/trackArtist/trackAlbum directly.
+    readonly property string trackTitle: _title
+    readonly property string trackArtist: _artist
+    readonly property string trackAlbum: _album
+
+    property string _title: ""
+    property string _artist: ""
+    property string _album: ""
+
+    function syncStable(): void {
+        const player = root.active;
+        root._title = player?.trackTitle ?? "";
+        root._artist = player?.trackArtist ?? "";
+        root._album = player?.trackAlbum ?? "";
+    }
+
+    Timer {
+        id: settle
+        interval: 150
+        onTriggered: {
+            root.syncStable();
+            root.maybeToastNowPlaying();
+        }
+    }
+
     // Dedup key for progressive metadata (e.g. mpv-mpris/yt-dlp player fills title then artist later).
     property string lastNowPlayingKey: ""
 
@@ -40,9 +69,8 @@ Singleton {
         return "";
     }
 
-    // Quickshell only emits postTrackChanged when trackid/url/title change, so late
-    // artist updates (common with mpv-mpris + yt-dlp player) never retrigger it. Watch
-    // title/artist too and toast once both are usable.
+    // Called only after settle fires, i.e. once title/artist have stopped changing for
+    // a beat, so the toast never fires on a mismatched intermediate pairing.
     function maybeToastNowPlaying(): void {
         if (!GlobalConfig.utilities.toasts.nowPlaying)
             return;
@@ -51,8 +79,8 @@ Singleton {
         if (!player)
             return;
 
-        const title = player.trackTitle ?? "";
-        const artist = player.trackArtist ?? "";
+        const title = root._title;
+        const artist = root._artist;
         if (!title || !artist)
             return;
 
@@ -61,22 +89,32 @@ Singleton {
             return;
 
         lastNowPlayingKey = key;
-        Toaster.toast(qsTr("Now Playing"), qsTr("%1 - %2").arg(artist).arg(title), "music_note");
+        const artIcon = root.getArtUrl(player) || "music_note";
+        Toaster.toast(qsTr("Now Playing"), qsTr("%1 - %2").arg(artist).arg(title), artIcon);
     }
 
-    onActiveChanged: lastNowPlayingKey = ""
+    onActiveChanged: {
+        lastNowPlayingKey = "";
+        settle.stop();
+        syncStable();
+        maybeToastNowPlaying();
+    }
 
     Connections {
         function onPostTrackChanged(): void {
-            root.maybeToastNowPlaying();
+            settle.restart();
         }
 
         function onTrackTitleChanged(): void {
-            root.maybeToastNowPlaying();
+            settle.restart();
         }
 
         function onTrackArtistChanged(): void {
-            root.maybeToastNowPlaying();
+            settle.restart();
+        }
+
+        function onTrackAlbumChanged(): void {
+            settle.restart();
         }
 
         target: root.active

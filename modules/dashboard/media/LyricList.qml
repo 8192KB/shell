@@ -18,7 +18,7 @@ Item {
     readonly property var _: {
         const p = Players.active;
         if (p)
-            Lyrics.setTrack(p.trackArtist, p.trackTitle, p.trackAlbum, p.length);
+            Lyrics.setTrack(Players.trackArtist, Players.trackTitle, Players.trackAlbum, p.length);
         else
             Lyrics.clearTrack();
     }
