@@ -24,15 +24,32 @@ Singleton {
     readonly property string trackArtist: _artist
     readonly property string trackAlbum: _album
 
+    // Upper bound on how long a single burst may hold the debounce open
+    readonly property int settleMaxWait: 1000
+
     property string _title: ""
     property string _artist: ""
     property string _album: ""
+    property real _settleStarted: 0
 
     function syncStable(): void {
         const player = root.active;
         root._title = player?.trackTitle ?? "";
         root._artist = player?.trackArtist ?? "";
         root._album = player?.trackAlbum ?? "";
+    }
+
+    // Extends the debounce, but only up to settleMaxWait from the first signal of the
+    // burst. A source that changes metadata faster than the interval — a stream that
+    // scrolls text through the title, say — would otherwise restart the timer forever
+    // and leave both the properties above and the toast stuck on the previous track.
+    function bumpSettle(): void {
+        if (!settle.running)
+            root._settleStarted = Date.now();
+        else if (Date.now() - root._settleStarted >= root.settleMaxWait)
+            return; // Let the pending timeout through instead of pushing it back again
+
+        settle.restart();
     }
 
     Timer {
@@ -107,26 +124,26 @@ Singleton {
 
     Connections {
         function onPostTrackChanged(): void {
-            settle.restart();
+            root.bumpSettle();
         }
 
         function onTrackTitleChanged(): void {
-            settle.restart();
+            root.bumpSettle();
         }
 
         function onTrackArtistChanged(): void {
-            settle.restart();
+            root.bumpSettle();
         }
 
         function onTrackAlbumChanged(): void {
-            settle.restart();
+            root.bumpSettle();
         }
 
         // Art lands after the text on Chromium-based players, which write a fresh
         // temp file per track. Waiting on it too means the icon is read once the art
         // has stopped moving; the key dedup above keeps this from toasting twice.
         function onTrackArtUrlChanged(): void {
-            settle.restart();
+            root.bumpSettle();
         }
 
         target: root.active
