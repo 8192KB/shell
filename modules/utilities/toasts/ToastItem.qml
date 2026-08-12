@@ -5,6 +5,7 @@ import Caelestia
 import Caelestia.Config
 import qs.components
 import qs.components.effects
+import qs.components.images
 import qs.services
 
 StyledRect {
@@ -82,15 +83,14 @@ StyledRect {
 
             readonly property real artSize: icon.implicitHeight + Tokens.padding.large
 
-            // Album art thumbnail (shown when icon is a URL)
-            Image {
+            // Album art thumbnail (shown when icon is a URL). FadeImage keeps the
+            // previous frame while the new one loads and crossfades instead of
+            // hard-cutting, same as the dashboard cover art (CoverArt.qml).
+            FadeImage {
                 id: artImage
 
                 anchors.fill: parent
                 source: iconContainer.isImageUrl ? root.modelData.icon : ""
-                fillMode: Image.PreserveAspectCrop
-                visible: iconContainer.isImageUrl && status === Image.Ready
-                smooth: true
 
                 layer.enabled: true
                 layer.effect: MultiEffect {
